@@ -6,22 +6,23 @@ import {
 } from "@slack/bolt";
 import { WebClient } from "@slack/web-api";
 import { config } from "./config.js";
-import { installationStore } from "./store.js";
 import { buildGmailAuthUrl } from "./oauth.js";
 import { markAsRead, buildGmailUrl, type EmailInfo } from "./gmail.js";
-import { getUserById, getUserBySlack } from "./db.js";
+import { getUserById, getUserBySlack, getInstallation } from "./db.js";
 import { createAuthedClient } from "./oauth.js";
 
 export const slackApp = new App({
   socketMode: true,
   appToken: config.slack.appToken,
-  clientId: config.slack.clientId,
-  clientSecret: config.slack.clientSecret,
-  signingSecret: config.slack.signingSecret,
-  stateSecret: config.slack.stateSecret,
-  installationStore,
-  installerOptions: {
-    directInstall: true,
+  authorize: async ({ teamId }) => {
+    if (!teamId) throw new Error("No team ID");
+    const row = await getInstallation(teamId);
+    if (!row) throw new Error(`Installation not found: ${teamId}`);
+    return {
+      botToken: row.bot_token,
+      botId: "",
+      botUserId: "",
+    };
   },
 });
 
