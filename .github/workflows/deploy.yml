@@ -67,15 +67,15 @@ jobs:
             COMPOSE_PATH="/volume1/docker/gmail-slack-bot"
 
             # Login to ghcr.io
-            echo "${{ secrets.GHCR_TOKEN }}" | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
             # Pull latest image
-            sudo docker pull ghcr.io/punch5545/slack-gmail-notification:latest
+            docker pull ghcr.io/punch5545/slack-gmail-notification:latest
 
             # Restart container
             cd "$COMPOSE_PATH"
-            sudo docker-compose pull
-            sudo docker-compose up -d --remove-orphans
+            docker-compose pull
+            docker-compose up -d --remove-orphans
 
             # Cleanup old images
-            sudo docker image prune -f
+            docker image prune -f
