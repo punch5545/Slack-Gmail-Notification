@@ -51,6 +51,7 @@ jobs:
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
+    environment: HBDSM-Ubion
 
     steps:
       - name: Deploy to Synology DSM
