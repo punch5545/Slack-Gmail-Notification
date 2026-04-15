@@ -1,26 +1,11 @@
-import { App, ExpressReceiver, type BlockAction, type ButtonAction } from "@slack/bolt";
+import { App, type BlockAction, type ButtonAction } from "@slack/bolt";
 import { config } from "./config.js";
 import { markAsRead, buildGmailUrl, type EmailInfo } from "./gmail.js";
-import { registerOAuthRoutes } from "./oauth.js";
-
-const receiver = new ExpressReceiver({
-  signingSecret: "unused",
-  endpoints: "/slack/events",
-});
-
-// Register Google OAuth routes
-registerOAuthRoutes(receiver.router);
-
-// Health endpoint
-receiver.router.get("/", (_req, res) => {
-  res.json({ status: "running", authUrl: "/auth/google" });
-});
 
 export const slackApp = new App({
   token: config.slack.botToken,
   appToken: config.slack.appToken,
   socketMode: true,
-  receiver,
 });
 
 function truncate(text: string, max: number): string {

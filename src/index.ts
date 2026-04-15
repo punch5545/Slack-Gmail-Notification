@@ -1,5 +1,7 @@
+import http from "node:http";
+import { URL } from "node:url";
 import { config } from "./config.js";
-import { loadSavedToken } from "./oauth.js";
+import { loadSavedToken, registerOAuthRoutes } from "./oauth.js";
 import { initPolling, checkNewEmails } from "./gmail.js";
 import { slackApp, sendEmailNotification } from "./slack.js";
 
@@ -24,9 +26,29 @@ async function startPolling() {
   }, config.pollInterval);
 }
 
+// Simple HTTP server for OAuth routes
+const httpServer = http.createServer(async (req, res) => {
+  const url = new URL(req.url ?? "/", `http://localhost:${config.port}`);
+  const handler = oauthRoutes.get(url.pathname);
+  if (handler) {
+    await handler(req, res, url);
+  } else {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ status: "running" }));
+  }
+});
+
+const oauthRoutes = registerOAuthRoutes();
+
 async function main() {
-  await slackApp.start(config.port);
-  console.log(`[Server] Running on http://localhost:${config.port}`);
+  // Start Slack app (Socket Mode)
+  await slackApp.start();
+  console.log("[Slack] Connected via Socket Mode");
+
+  // Start HTTP server for OAuth
+  httpServer.listen(config.port, () => {
+    console.log(`[HTTP] Running on http://localhost:${config.port}`);
+  });
 
   const hasToken = await loadSavedToken();
   if (hasToken) {
@@ -36,7 +58,6 @@ async function main() {
       `[Auth] Visit http://localhost:${config.port}/auth/google to authenticate Gmail`,
     );
 
-    // Poll for token file until OAuth completes
     const check = setInterval(async () => {
       const loaded = await loadSavedToken();
       if (loaded) {

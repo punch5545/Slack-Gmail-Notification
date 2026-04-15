@@ -2,12 +2,12 @@ import { google } from "googleapis";
 import { readFile, writeFile } from "node:fs/promises";
 import { config } from "./config.js";
 import type { Credentials } from "google-auth-library";
-import type { Router } from "express";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { URL } from "node:url";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/gmail.modify",
-  "https://mail.google.com/",
 ];
 
 export function createOAuth2Client() {
@@ -28,7 +28,6 @@ export async function loadSavedToken(): Promise<boolean> {
     console.log("[OAuth] Loaded saved token");
     return true;
   } catch {
-    console.log("[OAuth] No saved token found. Visit /auth/google to authenticate.");
     return false;
   }
 }
@@ -38,7 +37,6 @@ async function saveToken(credentials: Credentials) {
   console.log("[OAuth] Token saved");
 }
 
-// Listen for token refresh and save automatically
 oauth2Client.on("tokens", async (tokens) => {
   const existing = oauth2Client.credentials;
   const merged = { ...existing, ...tokens };
@@ -47,30 +45,44 @@ oauth2Client.on("tokens", async (tokens) => {
   console.log("[OAuth] Token refreshed and saved");
 });
 
-export function registerOAuthRoutes(router: Router) {
-  router.get("/auth/google", (_req, res) => {
+type RouteHandler = (
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+) => Promise<void>;
+
+export function registerOAuthRoutes(): Map<string, RouteHandler> {
+  const routes = new Map<string, RouteHandler>();
+
+  routes.set("/auth/google", async (_req, res) => {
     const url = oauth2Client.generateAuthUrl({
       access_type: "offline",
       scope: SCOPES,
       prompt: "consent",
     });
-    res.redirect(url);
+    res.writeHead(302, { Location: url });
+    res.end();
   });
 
-  router.get("/auth/google/callback", async (req, res) => {
-    const code = req.query.code as string | undefined;
+  routes.set("/auth/google/callback", async (_req, res, url) => {
+    const code = url.searchParams.get("code");
     if (!code) {
-      res.status(400).send("Missing authorization code");
+      res.writeHead(400, { "Content-Type": "text/plain" });
+      res.end("Missing authorization code");
       return;
     }
     try {
       const { tokens } = await oauth2Client.getToken(code);
       oauth2Client.setCredentials(tokens);
       await saveToken(tokens);
-      res.send("Gmail authentication successful! You can close this tab.");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end("Gmail authentication successful! You can close this tab.");
     } catch (err) {
       console.error("[OAuth] Token exchange failed:", err);
-      res.status(500).send("Authentication failed");
+      res.writeHead(500, { "Content-Type": "text/plain" });
+      res.end("Authentication failed");
     }
   });
+
+  return routes;
 }
