@@ -17,9 +17,9 @@ export const config = {
     clientSecret: required("GOOGLE_CLIENT_SECRET"),
     redirectUri:
       process.env.GOOGLE_REDIRECT_URI ||
-      "http://localhost:3000/auth/google/callback",
+      "http://localhost:3195/auth/google/callback",
   },
   pollInterval: Number(process.env.POLL_INTERVAL) || 30_000,
   tokenPath: process.env.TOKEN_PATH || "google-token.json",
-  port: Number(process.env.PORT) || 3000,
+  port: Number(process.env.PORT) || 3195,
 };

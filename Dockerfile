@@ -25,6 +25,6 @@ COPY --from=builder /app/dist ./dist
 VOLUME /app/data
 ENV TOKEN_PATH=/app/data/google-token.json
 
-EXPOSE 3000
+EXPOSE 3195
 
 CMD ["node", "dist/index.js"]
