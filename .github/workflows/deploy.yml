@@ -6,7 +6,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  # Docker image names must be lowercase
+  IMAGE_NAME: punch5545/slack-gmail-notification
 
 jobs:
   build-and-push:
@@ -62,18 +63,19 @@ jobs:
           username: ${{ secrets.DSM_USERNAME }}
           key: ${{ secrets.DSM_SSH_KEY }}
           script: |
-            export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
+            export PATH="/usr/local/bin:/usr/syno/bin:/usr/bin:/bin:$PATH"
+            COMPOSE_PATH="/volume1/docker/gmail-slack-bot"
 
             # Login to ghcr.io
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            echo "${{ secrets.GHCR_TOKEN }}" | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
             # Pull latest image
-            docker pull ghcr.io/${{ github.repository }}:latest
+            sudo docker pull ghcr.io/punch5545/slack-gmail-notification:latest
 
             # Restart container
-            cd ${{ secrets.DSM_COMPOSE_PATH }}
-            docker compose pull
-            docker compose up -d --remove-orphans
+            cd "$COMPOSE_PATH"
+            sudo docker-compose pull
+            sudo docker-compose up -d --remove-orphans
 
             # Cleanup old images
-            docker image prune -f
+            sudo docker image prune -f
