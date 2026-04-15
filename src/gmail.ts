@@ -1,7 +1,5 @@
 import { google, type gmail_v1 } from "googleapis";
-import { oauth2Client } from "./oauth.js";
-
-const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+import type { OAuth2Client } from "google-auth-library";
 
 export interface EmailInfo {
   id: string;
@@ -13,24 +11,21 @@ export interface EmailInfo {
   userEmail: string;
 }
 
-let lastHistoryId: string | null = null;
-let userEmail: string | null = null;
-
 function getHeader(
   headers: gmail_v1.Schema$MessagePartHeader[] | undefined,
   name: string,
 ): string {
-  return headers?.find((h) => h.name?.toLowerCase() === name.toLowerCase())?.value ?? "";
+  return (
+    headers?.find((h) => h.name?.toLowerCase() === name.toLowerCase())?.value ??
+    ""
+  );
 }
 
-async function getUserEmail(): Promise<string> {
-  if (userEmail) return userEmail;
-  const profile = await gmail.users.getProfile({ userId: "me" });
-  userEmail = profile.data.emailAddress ?? "";
-  return userEmail;
-}
-
-async function getMessageDetail(messageId: string): Promise<EmailInfo> {
+async function getMessageDetail(
+  gmail: gmail_v1.Gmail,
+  messageId: string,
+  userEmail: string,
+): Promise<EmailInfo> {
   const msg = await gmail.users.messages.get({
     userId: "me",
     id: messageId,
@@ -39,7 +34,6 @@ async function getMessageDetail(messageId: string): Promise<EmailInfo> {
   });
 
   const headers = msg.data.payload?.headers;
-  const email = await getUserEmail();
 
   return {
     id: messageId,
@@ -48,69 +42,61 @@ async function getMessageDetail(messageId: string): Promise<EmailInfo> {
     subject: getHeader(headers, "Subject") || "(no subject)",
     snippet: msg.data.snippet ?? "",
     date: getHeader(headers, "Date"),
-    userEmail: email,
+    userEmail,
   };
 }
 
-export async function initPolling(): Promise<void> {
+export async function getInitialHistoryId(
+  auth: OAuth2Client,
+): Promise<{ historyId: string; email: string }> {
+  const gmail = google.gmail({ version: "v1", auth });
   const profile = await gmail.users.getProfile({ userId: "me" });
-  lastHistoryId = profile.data.historyId ?? null;
-  userEmail = profile.data.emailAddress ?? null;
-  console.log(`[Gmail] Polling initialized for ${userEmail}, historyId: ${lastHistoryId}`);
+  return {
+    historyId: profile.data.historyId ?? "",
+    email: profile.data.emailAddress ?? "",
+  };
 }
 
-export async function checkNewEmails(): Promise<EmailInfo[]> {
-  if (!lastHistoryId) {
-    await initPolling();
-    return [];
+export async function checkNewEmails(
+  auth: OAuth2Client,
+  userEmail: string,
+  lastHistoryId: string,
+): Promise<{ emails: EmailInfo[]; newHistoryId: string }> {
+  const gmail = google.gmail({ version: "v1", auth });
+
+  const history = await gmail.users.history.list({
+    userId: "me",
+    startHistoryId: lastHistoryId,
+    historyTypes: ["messageAdded"],
+  });
+
+  const newHistoryId = history.data.historyId ?? lastHistoryId;
+  const emails: EmailInfo[] = [];
+  const seenIds = new Set<string>();
+
+  for (const record of history.data.history ?? []) {
+    for (const added of record.messagesAdded ?? []) {
+      const msg = added.message;
+      if (!msg?.id || seenIds.has(msg.id)) continue;
+
+      const labels = msg.labelIds ?? [];
+      if (labels.includes("SENT") || labels.includes("DRAFT")) continue;
+      if (!labels.includes("INBOX")) continue;
+
+      seenIds.add(msg.id);
+      const detail = await getMessageDetail(gmail, msg.id, userEmail);
+      emails.push(detail);
+    }
   }
 
-  try {
-    const history = await gmail.users.history.list({
-      userId: "me",
-      startHistoryId: lastHistoryId,
-      historyTypes: ["messageAdded"],
-    });
-
-    if (history.data.historyId) {
-      lastHistoryId = history.data.historyId;
-    }
-
-    const newMessages: EmailInfo[] = [];
-    const seenIds = new Set<string>();
-
-    for (const record of history.data.history ?? []) {
-      for (const added of record.messagesAdded ?? []) {
-        const msg = added.message;
-        if (!msg?.id || seenIds.has(msg.id)) continue;
-
-        // Skip messages in SENT or DRAFT
-        const labels = msg.labelIds ?? [];
-        if (labels.includes("SENT") || labels.includes("DRAFT")) continue;
-
-        // Only process INBOX messages
-        if (!labels.includes("INBOX")) continue;
-
-        seenIds.add(msg.id);
-        const detail = await getMessageDetail(msg.id);
-        newMessages.push(detail);
-      }
-    }
-
-    return newMessages;
-  } catch (err: unknown) {
-    const error = err as { code?: number };
-    if (error.code === 404) {
-      // historyId expired, re-initialize
-      console.log("[Gmail] History expired, re-initializing...");
-      await initPolling();
-      return [];
-    }
-    throw err;
-  }
+  return { emails, newHistoryId };
 }
 
-export async function markAsRead(messageId: string): Promise<void> {
+export async function markAsRead(
+  auth: OAuth2Client,
+  messageId: string,
+): Promise<void> {
+  const gmail = google.gmail({ version: "v1", auth });
   await gmail.users.messages.modify({
     userId: "me",
     id: messageId,
