@@ -21,10 +21,6 @@ RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 
-# Token file will be stored in a volume
-VOLUME /app/data
-ENV TOKEN_PATH=/app/data/google-token.json
-
 EXPOSE 3195
 
 CMD ["node", "dist/index.js"]

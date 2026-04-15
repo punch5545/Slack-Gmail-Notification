@@ -1,22 +1,17 @@
 services:
   gmail-slack-bot:
-    image: ghcr.io/${GITHUB_REPO:-your-username/gmail-slack-bot}:latest
+    image: ghcr.io/${GITHUB_REPO:-punch5545/slack-gmail-notification}:latest
     container_name: gmail-slack-bot
     restart: unless-stopped
     ports:
       - "3195:3195"
     env_file:
       - .env
-    environment:
-      - TOKEN_PATH=/app/data/google-token.json
-    volumes:
-      - gmail-bot-data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3195/"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
-
-volumes:
-  gmail-bot-data:

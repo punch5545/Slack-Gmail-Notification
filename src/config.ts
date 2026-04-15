@@ -8,9 +8,12 @@ function required(name: string): string {
 
 export const config = {
   slack: {
-    botToken: required("SLACK_BOT_TOKEN"),
+    botToken: process.env.SLACK_BOT_TOKEN, // Only needed for single-workspace; multi-workspace uses DB tokens
     appToken: required("SLACK_APP_TOKEN"),
-    userId: required("SLACK_USER_ID"),
+    clientId: required("SLACK_CLIENT_ID"),
+    clientSecret: required("SLACK_CLIENT_SECRET"),
+    signingSecret: required("SLACK_SIGNING_SECRET"),
+    stateSecret: process.env.SLACK_STATE_SECRET || "gmail-slack-bot-state",
   },
   google: {
     clientId: required("GOOGLE_CLIENT_ID"),
@@ -19,7 +22,7 @@ export const config = {
       process.env.GOOGLE_REDIRECT_URI ||
       "http://localhost:3195/auth/google/callback",
   },
+  databaseUrl: required("DATABASE_URL"),
   pollInterval: Number(process.env.POLL_INTERVAL) || 30_000,
-  tokenPath: process.env.TOKEN_PATH || "google-token.json",
   port: Number(process.env.PORT) || 3195,
 };
