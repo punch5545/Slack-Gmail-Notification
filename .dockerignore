@@ -1,0 +1,7 @@
+node_modules
+dist
+.env
+google-token.json
+.git
+.github
+*.md
