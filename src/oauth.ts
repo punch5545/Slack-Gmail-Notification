@@ -1,6 +1,7 @@
 import { google } from "googleapis";
+import { WebClient } from "@slack/web-api";
 import { config } from "./config.js";
-import { upsertUser } from "./db.js";
+import { upsertUser, getInstallation } from "./db.js";
 import type { OAuth2Client } from "google-auth-library";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { URL } from "node:url";
@@ -25,11 +26,16 @@ export function createAuthedClient(tokens: Record<string, unknown>): OAuth2Clien
 }
 
 /** Build a Gmail OAuth URL with Slack identity encoded in state */
-export function buildGmailAuthUrl(teamId: string, userId: string): string {
+export function buildGmailAuthUrl(
+  teamId: string,
+  userId: string,
+  channel?: string,
+  messageTs?: string,
+): string {
   const client = createOAuth2Client();
-  const state = Buffer.from(JSON.stringify({ teamId, userId })).toString(
-    "base64url",
-  );
+  const state = Buffer.from(
+    JSON.stringify({ teamId, userId, channel, messageTs }),
+  ).toString("base64url");
   return client.generateAuthUrl({
     access_type: "offline",
     scope: SCOPES,
@@ -59,12 +65,16 @@ export function registerOAuthRoutes(): Map<string, RouteHandler> {
 
     let teamId: string;
     let userId: string;
+    let channel: string | undefined;
+    let messageTs: string | undefined;
     try {
       const decoded = JSON.parse(
         Buffer.from(stateParam, "base64url").toString(),
       );
       teamId = decoded.teamId;
       userId = decoded.userId;
+      channel = decoded.channel;
+      messageTs = decoded.messageTs;
     } catch {
       res.writeHead(400, { "Content-Type": "text/plain" });
       res.end("Invalid state parameter");
@@ -84,10 +94,48 @@ export function registerOAuthRoutes(): Map<string, RouteHandler> {
       // Save to DB
       await upsertUser(teamId, userId, email, tokens as Record<string, unknown>);
 
+      // Update the original Slack message to show "Connected!"
+      if (channel && messageTs) {
+        try {
+          const installation = await getInstallation(teamId);
+          if (installation) {
+            const slackClient = new WebClient(installation.bot_token);
+            await slackClient.chat.update({
+              channel,
+              ts: messageTs,
+              text: "Gmail connected!",
+              blocks: [
+                {
+                  type: "section",
+                  text: {
+                    type: "mrkdwn",
+                    text: `:white_check_mark: *Gmail connected!*\n${email} is now linked. You'll receive Slack DMs for new emails.`,
+                  },
+                  accessory: {
+                    type: "button",
+                    text: { type: "plain_text", text: "Connected!" },
+                    action_id: "connect_gmail_link",
+                  },
+                },
+              ],
+            });
+          }
+        } catch (slackErr) {
+          console.error("[OAuth] Failed to update Slack message:", slackErr);
+        }
+      }
+
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end(
-        `<h2>Gmail connected!</h2><p>${email} is now linked. You'll receive Slack DMs for new emails. You can close this tab.</p>`,
-      );
+      res.end(`<!DOCTYPE html>
+<html>
+<head><title>Gmail Connected</title></head>
+<body>
+  <h2>Gmail connected!</h2>
+  <p>${email} is now linked. You'll receive Slack DMs for new emails.</p>
+  <p>This window will close automatically...</p>
+  <script>setTimeout(function() { window.close(); }, 2000);</script>
+</body>
+</html>`);
       console.log(`[OAuth] Gmail connected: ${email} (team=${teamId}, user=${userId})`);
     } catch (err) {
       console.error("[OAuth] Token exchange failed:", err);

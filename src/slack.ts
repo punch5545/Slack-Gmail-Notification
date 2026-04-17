@@ -46,10 +46,35 @@ slackApp.command(
 
     const teamId = command.team_id;
     const userId = command.user_id;
-    const authUrl = buildGmailAuthUrl(teamId, userId);
 
-    await client.chat.postMessage({
+    // Post initial message to get the timestamp
+    const result = await client.chat.postMessage({
       channel: userId,
+      text: "Click the link below to connect your Gmail account:",
+      blocks: [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: ":envelope: *Connect your Gmail*\nClick the button to authorize Gmail notifications.",
+          },
+          accessory: {
+            type: "button",
+            text: { type: "plain_text", text: "Connect Gmail" },
+            style: "primary",
+            action_id: "connect_gmail_link",
+          },
+        },
+      ],
+    });
+
+    // Build auth URL with message info so the callback can update this message
+    const authUrl = buildGmailAuthUrl(teamId, userId, userId, result.ts);
+
+    // Update message with the OAuth URL on the button
+    await client.chat.update({
+      channel: userId,
+      ts: result.ts!,
       text: "Click the link below to connect your Gmail account:",
       blocks: [
         {
