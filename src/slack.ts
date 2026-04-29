@@ -47,6 +47,8 @@ slackApp.command(
     const teamId = command.team_id;
     const userId = command.user_id;
 
+    console.log(`[Slack] /connect-gmail invoked: team=${teamId}, user=${userId}, hasToken=${!!client.token}, tokenPrefix=${client.token?.slice(0, 12) ?? "none"}`);
+
     // Post initial message to get the timestamp
     const result = await client.chat.postMessage({
       channel: userId,

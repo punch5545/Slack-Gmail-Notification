@@ -52,6 +52,7 @@ type RouteHandler = (
 
 export function registerOAuthRoutes(): Map<string, RouteHandler> {
   const routes = new Map<string, RouteHandler>();
+  const usedCodes = new Set<string>();
 
   routes.set("/auth/google/callback", async (_req, res, url) => {
     const code = url.searchParams.get("code");
@@ -62,6 +63,19 @@ export function registerOAuthRoutes(): Map<string, RouteHandler> {
       res.end("Missing authorization code or state");
       return;
     }
+
+    // Prevent double-exchange of the same authorization code (e.g. browser preload/refresh)
+    if (usedCodes.has(code)) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(`<!DOCTYPE html>
+<html><head><title>Gmail Connected</title></head>
+<body><h2>Gmail connected!</h2><p>This window will close automatically...</p>
+<script>setTimeout(function() { window.close(); }, 1500);</script>
+</body></html>`);
+      return;
+    }
+    usedCodes.add(code);
+    setTimeout(() => usedCodes.delete(code), 10 * 60 * 1000);
 
     let teamId: string;
     let userId: string;
