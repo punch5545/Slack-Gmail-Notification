@@ -70,12 +70,14 @@ slackApp.command(
       ],
     });
 
+    const dmChannel = result.channel!;
+
     // Build auth URL with message info so the callback can update this message
-    const authUrl = buildGmailAuthUrl(teamId, userId, userId, result.ts);
+    const authUrl = buildGmailAuthUrl(teamId, userId, dmChannel, result.ts);
 
     // Update message with the OAuth URL on the button
     await client.chat.update({
-      channel: userId,
+      channel: dmChannel,
       ts: result.ts!,
       text: "Click the link below to connect your Gmail account:",
       blocks: [
